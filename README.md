@@ -5,6 +5,11 @@
 [![Build Status](https://travis-ci.org/Houdini/two_factor_authentication.svg?branch=master)](https://travis-ci.org/Houdini/two_factor_authentication)
 [![Code Climate](https://codeclimate.com/github/Houdini/two_factor_authentication.svg)](https://codeclimate.com/github/Houdini/two_factor_authentication)
 
+## Creator
+
+This gem was forked from and created by Houdini
+Github page can be found here: https://github.com/Houdini/two_factor_authentication
+
 ## Features
 
 * Support for 2 types of OTP codes
@@ -34,26 +39,11 @@ Note that Ruby 2.1 or greater is required.
 
 #### Automatic initial setup
 
-To set up the model and database migration file automatically, run the
-following command:
-
-    bundle exec rails g two_factor_authentication MODEL
-
-Where MODEL is your model name (e.g. User or Admin). This generator will add
-`:two_factor_authenticatable` to your model's Devise options and create a
-migration in `db/migrate/`, which will add the following columns to your table:
-
-- `:second_factor_attempts_count`
-- `:encrypted_otp_secret_key`
-- `:encrypted_otp_secret_key_iv`
-- `:encrypted_otp_secret_key_salt`
-- `:direct_otp`
-- `:direct_otp_sent_at`
-- `:totp_timestamp`
+Generators have been removed due to incompatibility with mongoid
 
 #### Manual initial setup
 
-If you prefer to set up the model and migration manually, add the
+If you prefer to set up the model manually, add the
 `:two_factor_authentication` option to your existing devise options, such as:
 
 ```ruby
@@ -61,26 +51,19 @@ devise :database_authenticatable, :registerable, :recoverable, :rememberable,
        :trackable, :validatable, :two_factor_authenticatable
 ```
 
-Then create your migration file using the Rails generator, such as:
-
-```
-rails g migration AddTwoFactorFieldsToUsers second_factor_attempts_count:integer encrypted_otp_secret_key:string:index encrypted_otp_secret_key_iv:string encrypted_otp_secret_key_salt:string direct_otp:string direct_otp_sent_at:datetime totp_timestamp:timestamp
-```
-
-Open your migration file (it will be in the `db/migrate` directory and will be
-named something like `20151230163930_add_two_factor_fields_to_users.rb`), and
-add `unique: true` to the `add_index` line so that it looks like this:
+Add the following fields to model
 
 ```ruby
-add_index :users, :encrypted_otp_secret_key, unique: true
+  field :second_factor_attempts_count, type: Integer, default: 0
+  field :encrypted_otp_secret_key, type: String
+  field :encrypted_otp_secret_key_iv, type: String
+  field :encrypted_otp_secret_key_salt, type: String
+  field :direct_otp, type: String
+  field :direct_otp_sent_at, type: DateTime
+  field :totp_timestamp, type: Time
 ```
-Save the file.
 
 #### Complete the setup
-
-Run the migration with:
-
-    bundle exec rake db:migrate
 
 Add the following line to your model to fully enable two-factor auth:
 
@@ -163,106 +146,3 @@ Below is an example using ERB:
 
 <%= link_to "Sign out", destroy_user_session_path, :method => :delete %>
 ```
-
-#### Upgrading from version 1.X to 2.X
-
-The following database fields are new in version 2.
-
-- `direct_otp`
-- `direct_otp_sent_at`
-- `totp_timestamp`
-
-To add them, generate a migration such as:
-
-    $ rails g migration AddTwoFactorFieldsToUsers direct_otp:string direct_otp_sent_at:datetime totp_timestamp:timestamp
-
-The `otp_secret_key` is only required for users who use TOTP (Google Authenticator) codes,
-so unless it has been shared with the user it should be set to `nil`.  The
-following pseudo-code is an example of how this might be done:
-
-```ruby
-User.find_each do |user| do
-  if !uses_authenticator_app(user)
-    user.otp_secret_key = nil
-    user.save!
-  end
-end
-```
-
-#### Adding the TOTP encryption option to an existing app
-
-If you've already been using this gem, and want to start encrypting the OTP
-secret key in the database (recommended), you'll need to perform the following
-steps:
-
-1. Generate a migration to add the necessary columns to your model's table:
-
-   ```
-   rails g migration AddEncryptionFieldsToUsers encrypted_otp_secret_key:string:index encrypted_otp_secret_key_iv:string encrypted_otp_secret_key_salt:string
-   ```
-
-   Open your migration file (it will be in the `db/migrate` directory and will be
-   named something like `20151230163930_add_encryption_fields_to_users.rb`), and
-   add `unique: true` to the `add_index` line so that it looks like this:
-
-   ```ruby
-   add_index :users, :encrypted_otp_secret_key, unique: true
-   ```
-   Save the file.
-
-2. Run the migration: `bundle exec rake db:migrate`
-
-2. Update the gem: `bundle update two_factor_authentication`
-
-3. Add `encrypted: true` to `has_one_time_password` in your model.
-   For example: `has_one_time_password(encrypted: true)`
-
-4. Generate a migration to populate the new encryption fields:
-   ```
-   rails g migration PopulateEncryptedOtpFields
-   ```
-
-   Open the generated file, and replace its contents with the following:
-   ```ruby
-   class PopulateEncryptedOtpFields < ActiveRecord::Migration
-      def up
-        User.reset_column_information
-
-        User.find_each do |user|
-          user.otp_secret_key = user.read_attribute('otp_secret_key')
-          user.save!
-        end
-      end
-
-      def down
-        User.reset_column_information
-
-        User.find_each do |user|
-          user.otp_secret_key = ROTP::Base32.random_base32
-          user.save!
-        end
-      end
-    end
-   ```
-
-5. Generate a migration to remove the `:otp_secret_key` column:
-   ```
-   rails g migration RemoveOtpSecretKeyFromUsers otp_secret_key:string
-   ```
-
-6. Run the migrations: `bundle exec rake db:migrate`
-
-If, for some reason, you want to switch back to the old non-encrypted version,
-use these steps:
-
-1. Remove `(encrypted: true)` from `has_one_time_password`
-
-2. Roll back the last 3 migrations (assuming you haven't added any new ones
-after them):
-   ```
-   bundle exec rake db:rollback STEP=3
-   ```
-
-### Example App
-
-[TwoFactorAuthenticationExample](https://github.com/Houdini/TwoFactorAuthenticationExample)
