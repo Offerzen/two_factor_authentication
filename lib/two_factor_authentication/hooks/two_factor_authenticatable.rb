@@ -1,13 +1,20 @@
 Warden::Manager.after_authentication do |user, auth, options|
-  if auth.env["action_dispatch.cookies"]
-    expected_cookie_value = "#{user.class}-#{user.public_send(Devise.second_factor_resource_id)}"
-    actual_cookie_value = auth.env["action_dispatch.cookies"].signed[TwoFactorAuthentication::REMEMBER_TFA_COOKIE_NAME]
-    bypass_by_cookie = actual_cookie_value == expected_cookie_value
-  end
+  if auth.request.path == '/api/auth/sign_in' || auth.request.authorization.present?
+    # For JWT token-based auth
+    #   JWTs are only generated after validating 2FA codes.
+    #   Therefore no need to execute callback code.
+  else
+    # For session-based auth
+    if auth.env["action_dispatch.cookies"]
+      expected_cookie_value = "#{user.class}-#{user.public_send(Devise.second_factor_resource_id)}"
+      actual_cookie_value = auth.env["action_dispatch.cookies"].signed[TwoFactorAuthentication::REMEMBER_TFA_COOKIE_NAME]
+      bypass_by_cookie = actual_cookie_value == expected_cookie_value
+    end
 
-  if user.respond_to?(:need_two_factor_authentication?) && !bypass_by_cookie
-    if auth.session(options[:scope])[TwoFactorAuthentication::NEED_AUTHENTICATION] = user.need_two_factor_authentication?(auth.request)
-      user.send_new_otp unless user.totp_enabled?
+    if user.respond_to?(:need_two_factor_authentication?) && !bypass_by_cookie
+      if auth.session(options[:scope])[TwoFactorAuthentication::NEED_AUTHENTICATION] = user.need_two_factor_authentication?(auth.request)
+        user.send_new_otp unless user.totp_enabled?
+      end
     end
   end
 end
